@@ -16,15 +16,15 @@ Both are good libraries; the differences that matter here are narrow.
 |---|---|---|
 | Latest protocol revision | `2025-11-25` | `2026-07-28` |
 | `server/discover` | not present | present |
-| Transports | stdio, SSE, Streamable HTTP | stdio, SSE, Streamable HTTP |
+| Transports | stdio, HTTP+SSE (legacy), Streamable HTTP | stdio, HTTP+SSE (legacy), Streamable HTTP |
 | Tools, resources, prompts | all three | all three |
 | Resource templates and subscriptions | yes | yes |
-| Authentication helpers | none in-tree | `auth/` and `oauthex/` packages |
+| Authentication helpers | OAuth client (`client/transport/oauth.go`), serves Protected Resource Metadata | the same, plus server-side bearer verification (`auth.RequireBearerToken`) and `oauthex/` |
 | Conformance suite | none in-tree | `conformance/` with baseline fixtures |
 | Observability | `otel/` and `tracing/` packages | none in-tree |
 | Test helpers | `mcptest/` package | in-memory transport |
-| Stars | 9.0k | 5.0k |
-| Open issues | 30 | 97 |
+| Stars (19 Aug 2026) | 9.0k | 5.0k |
+| Open issues (19 Aug 2026) | 30 | 97 |
 | Licence | MIT | Apache-2.0 (transitioning from MIT) |
 | Status | community | maintained by the MCP project |
 
@@ -68,8 +68,12 @@ return mcp.LATEST_PROTOCOL_VERSION
 ```
 
 The gap is on the other side: a client speaking the current revision sends no
-`initialize` at all, and there is no `server/discover` in v0.57 for it to reach
-instead.
+`initialize` at all. `server/discover` is one way it can probe, and the spec
+marks that optional, so a client may equally invoke any RPC inline and expect an
+`UnsupportedProtocolVersionError` back. v0.57 answers neither, and the spec's own
+modern-client-to-legacy-server row is blunt about the result: "Fails. The server
+may reject the request with an implementation-defined error, stay silent, or even
+process an era-ambiguous method under legacy semantics."
 
 `mcp-go` added the revision in `v1.0.0-beta.1` on 12 August, which is both a beta
 and a v1 API break from the 0.x line.
@@ -81,9 +85,11 @@ everything registered through it.
 
 ## Transports
 
-Both SDKs ship stdio, SSE and Streamable HTTP. Worth noting for any comparison
-table that SSE is the transport Streamable HTTP **replaced** in the `2025-03-26`
-revision, so new work should target Streamable HTTP and treat SSE as
+Both SDKs ship stdio, HTTP+SSE and Streamable HTTP. The naming is worth getting
+right in any comparison table, because "SSE" on its own is now ambiguous:
+HTTP+SSE is the separate transport that Streamable HTTP **replaced** in the
+`2025-03-26` revision, while Streamable HTTP still uses SSE for its own response
+streams. New work should target Streamable HTTP and treat HTTP+SSE as
 backwards-compatibility only.
 
 ## Tool annotations
@@ -106,9 +112,13 @@ therefore goes out as `readOnlyHint: false, destructiveHint: true`, and clients
 use those hints to decide what needs confirmation. Both #28 and #34 hit this and
 have since set the annotations explicitly.
 
-If a read-only mode is later driven off annotations, which is the cheapest
-correct implementation, this default is worth a build-time guard so a new tool
-cannot silently inherit it.
+Annotations cannot carry the read-only decision on their own. The spec is
+explicit that they are hints and should "be untrusted unless they come from
+trusted servers", so a client must not derive authorization or safety behaviour
+from them. A read-only mode belongs in the registration path, by not registering
+mutating tools at all, with the annotations following that decision rather than
+defining it. Either way the seeded default is worth a build-time guard so a new
+tool cannot silently ship as `destructiveHint: true`.
 
 ## Where each is stronger
 
