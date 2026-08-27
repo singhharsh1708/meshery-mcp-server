@@ -249,8 +249,8 @@ func TestMissingClusterFilterReturnsNothing(t *testing.T) {
 	}
 
 	out = authedGet(t, s, "/api/system/meshsync/resources", `clusterIds=["`+s.Data().ClusterID()+`"]`)
-	if n := out["totalCount"].(float64); n != 4 {
-		t.Fatalf("totalCount = %v, want 4 with the filter", n)
+	if want := float64(len(s.Data().Resources)); out["totalCount"].(float64) != want {
+		t.Fatalf("totalCount = %v, want %v with the filter", out["totalCount"], want)
 	}
 }
 
@@ -478,8 +478,8 @@ func TestAsDesignClearsTheFlatList(t *testing.T) {
 	if !ok {
 		t.Fatalf("no design in the response: %v", out)
 	}
-	if n := len(design["components"].([]any)); n != 4 {
-		t.Fatalf("components = %d, want 4", n)
+	if want := len(s.Data().Resources); len(design["components"].([]any)) != want {
+		t.Fatalf("components = %d, want %d", len(design["components"].([]any)), want)
 	}
 }
 
