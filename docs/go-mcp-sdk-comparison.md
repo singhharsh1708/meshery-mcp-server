@@ -6,7 +6,8 @@ authentication, maintenance maturity, testability, observability and Meshery
 ecosystem fit.
 
 Everything below was read from the tagged source of each SDK rather than from
-release notes or documentation. Versions compared are `mark3labs/mcp-go` v0.57.0
+release notes or documentation, apart from the dated star and issue counts,
+which are GitHub metadata. Versions compared are `mark3labs/mcp-go` v0.57.0
 (the version the scaffold in #28 uses) and `modelcontextprotocol/go-sdk` v1.7.0.
 Both are good libraries; the differences that matter here are narrow.
 
@@ -53,12 +54,13 @@ protocolVersion20260728 = "2026-07-28"
 ```
 
 `2026-07-28` is a breaking revision. It removes the `initialize` handshake and
-carries the protocol version in `_meta` on every request, makes `server/discover`
-mandatory for advertising capabilities, and replaces `resources/subscribe` with
-`subscriptions/listen`.
+carries the protocol version in `_meta` on every request, adds `server/discover`
+for capability discovery (optional: a client may probe with it or invoke any RPC
+inline), and replaces `resources/subscribe` with `subscriptions/listen`.
 
-**Nothing is broken by staying on `2025-11-25` today.** Clients negotiate down,
-and `mcp-go` handles an unknown version gracefully rather than erroring:
+**A legacy client loses nothing by a server staying on `2025-11-25` today.**
+Legacy clients negotiate down, and `mcp-go` handles an unknown version gracefully
+rather than erroring:
 
 ```go
 if slices.Contains(mcp.ValidProtocolVersions, clientVersion) {
@@ -70,10 +72,14 @@ return mcp.LATEST_PROTOCOL_VERSION
 The gap is on the other side: a client speaking the current revision sends no
 `initialize` at all. `server/discover` is one way it can probe, and the spec
 marks that optional, so a client may equally invoke any RPC inline and expect an
-`UnsupportedProtocolVersionError` back. v0.57 answers neither, and the spec's own
-modern-client-to-legacy-server row is blunt about the result: "Fails. The server
-may reject the request with an implementation-defined error, stay silent, or even
-process an era-ambiguous method under legacy semantics."
+`UnsupportedProtocolVersionError` back. Measured against a one-tool v0.57 stdio
+server: `server/discover` fails cleanly with `-32601`, but the inline RPC is
+**executed**, and answered in the legacy result shape with no error and no
+version acknowledgement. That is the third outcome in the spec's own
+modern-client-to-legacy-server row: "Fails. The server may reject the request
+with an implementation-defined error, stay silent, or even process an
+era-ambiguous method under legacy semantics." A client that reads only `content`
+cannot tell it was downgraded.
 
 `mcp-go` added the revision in `v1.0.0-beta.1` on 12 August, which is both a beta
 and a v1 API break from the 0.x line.
