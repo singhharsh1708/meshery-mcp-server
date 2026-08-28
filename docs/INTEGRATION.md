@@ -12,9 +12,18 @@ Building the server from source works, and takes about two minutes.
 ```
 
 It clones `meshery/meshery` into `.meshery-src`, builds `server/cmd`, and serves
-on `http://127.0.0.1:9081` with the built-in `Local` provider, so no remote
-provider, credentials or network access are needed. Pass a path to use a checkout
+on port 9081 with the built-in `Local` provider. Pass a path to use a checkout
 you already have.
+
+Two things to be accurate about. Setup needs network access, for the clone and
+for a large Go module tree; it is only the running server that needs no remote
+provider and no credentials, because `PROVIDER=Local` selects the built-in one.
+
+And it listens on every interface rather than loopback. Meshery offers no
+bind-address option: `server/router/server.go` passes `fmt.Sprintf(":%d", port)`
+straight to `http.ListenAndServe`. So this is a development server, and running
+it on an untrusted network exposes it. Firewall the port or stay on a trusted
+one.
 
 It seeds itself with roughly 355 designs and 292 models, which is enough to
 exercise pagination and the design endpoints against real volume rather than a

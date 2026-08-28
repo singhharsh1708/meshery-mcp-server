@@ -10,8 +10,15 @@
 #   ./scripts/meshery-dev-server.sh                 # clones into ./.meshery-src
 #   ./scripts/meshery-dev-server.sh /path/to/meshery
 #
-# Serves on $PORT (default 9081) with the built-in Local provider, so no remote
-# provider, credentials or network are needed.
+# Setup needs network: it clones meshery/meshery when the checkout is absent,
+# and the build downloads a large module tree. Once built, running it needs no
+# remote provider and no credentials, because PROVIDER=Local selects the
+# built-in provider.
+#
+# It listens on every interface, not loopback. Meshery has no bind-address
+# option: server/router/server.go passes fmt.Sprintf(":%d", port) straight to
+# http.ListenAndServe. Treat it as a development server and do not run it on a
+# network you do not trust.
 set -euo pipefail
 
 PORT="${PORT:-9081}"
@@ -31,7 +38,8 @@ BIN="$(cd "$SRC" && pwd)/meshery-server"
 echo "building the server (first build pulls a large dependency tree)"
 (cd "$SRC/server/cmd" && go build -o "$BIN" .)
 
-echo "serving on http://127.0.0.1:$PORT with the Local provider"
+echo "serving on port $PORT with the Local provider"
+echo "note: Meshery binds every interface, it has no loopback option; dev use only"
 cd "$SRC/server/cmd"
 PORT="$PORT" \
 PROVIDER=Local \
