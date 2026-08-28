@@ -31,22 +31,31 @@ one:
 ?clusterIds=%5B%22ksid-abc%22%5D
 ```
 
-Its sibling `/api/system/meshsync/resources/summary` requires a cluster too, but
-answers `400`, and spells the parameter as a repeated singular `clusterId`. The
-two endpoints next to each other disagree on both the name and the encoding.
+Its sibling `/api/system/meshsync/resources/summary` answers `400` without a
+`clusterId`, and spells the parameter as a repeated singular. The two endpoints
+next to each other disagree on both the name and the encoding. And the `400` is
+a presence check on the key alone, measured live: `clusterId=` with an empty
+value, or `clusterId=all`, both pass it and return `200`.
 
 Suggested contract: make the cluster identifier a required input rather than
 optional, and fail in the client rather than passing an empty result upward.
 
-### The design file spelling changed
+### The design file changes encoding per endpoint
 
-`MesheryPattern.PatternFile` is a JSON **string** under `patternFile` on current
-releases. Older releases spelled it `pattern_file`. A client that decodes only one
-spelling gets a zero-valued design and no error, so `get_design` returns a design
-with no components rather than failing.
+`patternFile` is a string on current releases, but not the same string
+everywhere. Measured against a Meshery Server built from master, six designs,
+all six the same way: `GET /api/pattern` (the list) serves it as **YAML**, and
+`GET /api/pattern/{id}` serves the same field as **JSON**. `SaveMesheryPattern`
+stores the design with `yaml.Marshal` and the list path returns that stored form
+verbatim. Older releases spelled the key `pattern_file`.
 
-Suggested contract: accept both spellings and both shapes, and treat a missing
-design file as an error.
+A client that decodes only one encoding, or only one spelling, gets a
+zero-valued design and no error, so `get_design` returns a design with no
+components rather than failing, and it fails on exactly one of the two
+endpoints, which no mock reproduces.
+
+Suggested contract: accept both spellings, both encodings and both shapes, and
+treat a missing or unparsable design file as an error.
 
 ### Relationship evaluation fails open
 
@@ -87,16 +96,23 @@ is cheaper than adding the parameter to every environment and workspace tool.
 
 ## Authentication failures do not look like authentication failures
 
-Meshery does not answer an unauthenticated API call with `401`. `AuthMiddleware`
-redirects:
+An unauthenticated API call almost never gets a `401`. Which failure it gets
+depends on what the request carried, measured against a running server:
 
-```go
-http.Redirect(w, req, fmt.Sprintf("/provider?%s", queryParams.Encode()), http.StatusFound)
-```
+- No provider selected: `AuthMiddleware` answers `302` to
+  `/provider?ref=<base64 path>`, for GET, POST and DELETE alike, before any
+  session logic runs.
+- Provider selected, no `token` cookie (the common empty-session case): a GET is
+  redirected to the **remote provider's own login URL**, which is off-host, and
+  a non-GET gets a bare `404` with no redirect at all.
+- Token present but invalid: `302` to `/auth/login` or `/provider`.
+- Real `401`s exist in two corners: after `MaxAuthRetries` (3), and on an
+  enforced-provider mismatch.
 
-Go's default `http.Client` follows redirects, so a client lands on a `200` HTML
-login page, passes any `2xx` check, and fails inside the JSON decoder. The user
-sees a parse error rather than "not authenticated".
+Go's default `http.Client` follows the redirects, so a client lands on a `200`
+HTML login page, passes any `2xx` check, and fails inside the JSON decoder. The
+user sees a parse error rather than "not authenticated", or, on an empty-session
+write, what looks like a missing endpoint.
 
 Two further details that make this harder to notice:
 
@@ -107,9 +123,10 @@ Two further details that make this harder to notice:
   started Meshery accepts anything. An incorrect auth implementation therefore
   works in local development and fails only against a remote provider.
 
-Suggested contract: set `CheckRedirect` to stop, and treat a redirect to
-`/provider` or `/auth/login` as an authentication error with remediation text
-pointing at `mesheryctl system login`.
+Suggested contract: set `CheckRedirect` to stop, and treat **any** redirect on
+an API call as an authentication error with remediation text pointing at
+`mesheryctl system login`. Matching only `/provider` and `/auth/login` misses
+the empty-session case, whose redirect target is the remote provider's host.
 
 ## Three identifiers for one cluster
 
@@ -143,7 +160,7 @@ Mapping the above onto the MeshKit-style categories raised on the call:
 
 | Case | Detection | What the user should be told |
 |---|---|---|
-| Not authenticated | redirect to `/provider` or `/auth/login` | session expired or absent, run `mesheryctl system login` |
+| Not authenticated | any `302` on an API call (to `/provider`, `/auth/login`, or the remote provider's host), or a bare `404` on an empty-session write | session expired or absent, run `mesheryctl system login` |
 | Missing required scope | `400` with `orgId is required`, or an absent cluster identifier | which identifier is missing and where to obtain it |
 | Upstream failure | non-2xx with a Meshery error body | Meshery's own message, preserved rather than discarded |
 | Ambiguous empty result | empty list where a scope filter was required | that the query was unscoped, not that the resource is empty |
