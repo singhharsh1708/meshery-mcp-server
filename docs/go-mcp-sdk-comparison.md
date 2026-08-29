@@ -5,9 +5,11 @@ channel: specification support, tools/resources/prompts, transports,
 authentication, maintenance maturity, testability, observability and Meshery
 ecosystem fit.
 
-Everything below was read from the tagged source of each SDK rather than from
-release notes or documentation, apart from the dated star and issue counts,
-which are GitHub metadata. Versions compared are `mark3labs/mcp-go` v0.57.0
+SDK-specific claims below were read from the tagged source of each SDK rather
+than from release notes or documentation. What v0.57 does with a modern request
+was measured against a one-tool stdio server built on it. Protocol claims come
+from the MCP specification, cited where used. The star and issue counts are
+GitHub metadata, dated. Versions compared are `mark3labs/mcp-go` v0.57.0
 (the version the scaffold in #28 uses) and `modelcontextprotocol/go-sdk` v1.7.0.
 Both are good libraries; the differences that matter here are narrow.
 
