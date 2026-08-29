@@ -11,9 +11,15 @@ Building the server from source works, and takes about two minutes.
 ./scripts/meshery-dev-server.sh
 ```
 
-It clones `meshery/meshery` into `.meshery-src`, builds `server/cmd`, and serves
-on port 9081 with the built-in `Local` provider. Pass a path to use a checkout
-you already have.
+It fetches `meshery/meshery` at a pinned revision into `.meshery-src`, builds
+`server/cmd`, and serves on port 9081 with the built-in `Local` provider. Pass a
+path to use a checkout you already have.
+
+The pin is `e6ed2de164b42d805b78dd1cdb3c4b415e8686eb`, the revision every
+observation below was made against. Seed counts and endpoint behaviour are
+specific to it. Set `MESHERY_REF` to test a newer Meshery, and treat any
+difference from what is recorded here as a finding about Meshery rather than
+about the tests.
 
 Two things to be accurate about. Setup needs network access, for the clone and
 for a large Go module tree; it is only the running server that needs no remote

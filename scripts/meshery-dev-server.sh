@@ -24,9 +24,18 @@ set -euo pipefail
 PORT="${PORT:-9081}"
 SRC="${1:-.meshery-src}"
 
+# The revision every observation in docs/INTEGRATION.md was made against.
+# Override with MESHERY_REF to test a newer Meshery, knowing the seed counts
+# and endpoint behaviour recorded there may then differ.
+MESHERY_REF="${MESHERY_REF:-e6ed2de164b42d805b78dd1cdb3c4b415e8686eb}"
+
 if [ ! -d "$SRC" ]; then
-  echo "cloning meshery/meshery into $SRC"
-  git clone --depth 1 https://github.com/meshery/meshery.git "$SRC"
+  echo "fetching meshery/meshery at $MESHERY_REF into $SRC"
+  mkdir -p "$SRC"
+  git -C "$SRC" init -q
+  git -C "$SRC" remote add origin https://github.com/meshery/meshery.git
+  git -C "$SRC" fetch -q --depth 1 origin "$MESHERY_REF"
+  git -C "$SRC" checkout -q FETCH_HEAD
 fi
 
 if ! command -v go >/dev/null 2>&1; then
