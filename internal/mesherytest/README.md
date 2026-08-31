@@ -257,6 +257,7 @@ how the package's own tests check that each one fires on a client that is wrong.
 
 ## Status
 
-The package itself is stdlib-only, so it lifts into another repository as-is;
-one test, the positive control that drives this repo's own client, stays
-behind. Apache 2.0, matching Meshery.
+The package is stdlib-only, so it carries no dependencies into whatever
+repository holds it. One test is not here: the positive control that drives a
+real Meshery client through every assertion at once. It needs a client to point
+at, so it lives alongside one. Apache 2.0, matching Meshery.
