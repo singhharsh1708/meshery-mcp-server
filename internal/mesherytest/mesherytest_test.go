@@ -335,16 +335,29 @@ func TestSummaryUsesADifferentSpelling(t *testing.T) {
 
 // TestSummaryClusterIDIsAPresenceCheck covers the shape of the summary guard.
 // It tests that the clusterId key is present, not that it holds anything useful,
-// so an empty value or the literal "all" that the UI sends both sail past it and
-// come back 200 with a summary of nothing in particular.
+// so an empty value or the literal "all" that the UI sends both sail past it.
+//
+// What comes back is the trap. The value is then used as an ordinary cluster id
+// in an IN clause, so neither matches a row and every field of the summary is
+// null under a 200. Measured against a live server: clusterId=all and
+// clusterId= both return {"kinds":null,"namespaces":null,"labels":null}. "all"
+// is not a wildcard, it is a value nothing is named.
 func TestSummaryClusterIDIsAPresenceCheck(t *testing.T) {
 	s := mesherytest.New(t)
 	const path = "/api/system/meshsync/resources/summary"
 
+	// The real cluster id is the control: the same endpoint does answer. It runs
+	// first because the assertion below judges the last request to this path.
+	if out := authedGet(t, s, path, "clusterId="+s.Data().ClusterID()); out["kinds"] == nil {
+		t.Errorf("the seeded cluster should have a census: %v", out)
+	}
+
 	for _, q := range []string{"clusterId=", "clusterId=all"} {
 		out := authedGet(t, s, path, q)
-		if out["kinds"] == nil {
-			t.Errorf("%s: expected 200 with a summary, got %v", q, out)
+		for _, key := range []string{"kinds", "namespaces", "labels"} {
+			if out[key] != nil {
+				t.Errorf("%s: %s should be null, a request naming no cluster matches nothing: %v", q, key, out)
+			}
 		}
 	}
 
@@ -1019,8 +1032,13 @@ func TestAssertQueryNoticesARepeatedKey(t *testing.T) {
 
 // The paging assertion must judge the value, not its spelling: "00" and "+0"
 // are page zero, and a correct client should not be failed for writing one.
+//
+// The plus is sent percent-encoded on purpose. Written bare in a query string it
+// means a space, so the server would receive " 0", which Atoi rejects outright:
+// the case would pass through the unparsable branch below without the "+0"
+// spelling ever reaching the assertion.
 func TestZeroBasedPagingJudgesTheValueNotTheSpelling(t *testing.T) {
-	for _, page := range []string{"0", "00", "+0"} {
+	for _, page := range []string{"0", "00", "%2B0"} {
 		s := mesherytest.New(t)
 		authedGet(t, s, "/api/pattern", "page="+page)
 		if failed, msg := (&recorder{}).run(func(tt mesherytest.T) {
@@ -1035,5 +1053,18 @@ func TestZeroBasedPagingJudgesTheValueNotTheSpelling(t *testing.T) {
 		s.AssertZeroBasedPaging(tt, "/api/pattern")
 	}); !failed {
 		t.Error("page=01 is page one and should be flagged")
+	}
+
+	// A value the server cannot parse is page zero to it, because both
+	// pagination paths discard the Atoi error. A bare plus is the everyday way
+	// to produce one: in a query string it means a space.
+	for _, page := range []string{"+0", "abc", ""} {
+		s := mesherytest.New(t)
+		authedGet(t, s, "/api/pattern", "page="+page)
+		if failed, msg := (&recorder{}).run(func(tt mesherytest.T) {
+			s.AssertZeroBasedPaging(tt, "/api/pattern")
+		}); failed {
+			t.Errorf("page=%q is page zero to the server and should not be flagged: %s", page, msg)
+		}
 	}
 }
